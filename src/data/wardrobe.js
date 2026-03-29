@@ -6,6 +6,22 @@ import blackHoodieUrl from '../assets/clothes/black-hoodie.svg?url'
 import officeBlazerUrl from '../assets/clothes/office-blazer.svg?url'
 import whiteTshirtUrl from '../assets/clothes/white-tshirt.svg?url'
 
+/** Legacy public paths (localStorage) → Vite production URLs. */
+const LEGACY_CLOTHING_PATHS = new Map([
+  ['/assets/clothes/white-tshirt.svg', whiteTshirtUrl],
+  ['/assets/clothes/black-hoodie.svg', blackHoodieUrl],
+  ['/assets/clothes/office-blazer.svg', officeBlazerUrl],
+])
+
+/**
+ * Resolve a stored garment URL to the built asset URL (hashed on Vercel).
+ */
+export function resolveClothingAssetUrl(stored) {
+  if (stored == null || stored === '') return null
+  const key = String(stored).trim()
+  return LEGACY_CLOTHING_PATHS.get(key) ?? key
+}
+
 export const wardrobe = [
   {
     id: 'top-casual-tee',

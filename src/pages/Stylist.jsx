@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { generateLook } from '../data/wardrobe.js'
+import { generateLook, resolveClothingAssetUrl } from '../data/wardrobe.js'
 import { useLook } from '../hooks/useLook.js'
 
 const STYLES = ['office', 'casual']
@@ -26,7 +26,9 @@ export default function Stylist() {
 
   const handleVirtualTryOn = () => {
     if (!currentOutfit?.top?.imagePath) return
-    setVirtualMirrorTopPath(currentOutfit.top.imagePath)
+    setVirtualMirrorTopPath(
+      resolveClothingAssetUrl(currentOutfit.top.imagePath),
+    )
     setSelectedLook({
       vibe: selectedStyle,
       top: currentOutfit.top,
