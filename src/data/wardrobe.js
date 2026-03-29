@@ -1,55 +1,60 @@
 /**
- * AVISHU mock wardrobe — categories use only the three SVGs in /assets/clothes/.
+ * AVISHU mock wardrobe — clothing URLs come from Vite static imports (?url)
+ * so production builds on Vercel resolve hashed assets under /assets/.
  */
+import blackHoodieUrl from '../assets/clothes/black-hoodie.svg?url'
+import officeBlazerUrl from '../assets/clothes/office-blazer.svg?url'
+import whiteTshirtUrl from '../assets/clothes/white-tshirt.svg?url'
+
 export const wardrobe = [
   {
     id: 'top-casual-tee',
     name: 'Core Cotton Tee',
     category: 'top',
     style: 'casual',
-    imagePath: '/assets/clothes/white-tshirt.svg',
+    imagePath: whiteTshirtUrl,
   },
   {
     id: 'top-casual-hoodie',
     name: 'Studio Hoodie',
     category: 'top',
     style: 'casual',
-    imagePath: '/assets/clothes/black-hoodie.svg',
+    imagePath: blackHoodieUrl,
   },
   {
     id: 'top-office-blazer',
     name: 'Structured Blazer',
     category: 'top',
     style: 'office',
-    imagePath: '/assets/clothes/office-blazer.svg',
+    imagePath: officeBlazerUrl,
   },
   {
     id: 'bottom-casual-denim',
     name: 'Raw Hem Denim',
     category: 'bottom',
     style: 'casual',
-    imagePath: '/assets/clothes/white-tshirt.svg',
+    imagePath: whiteTshirtUrl,
   },
   {
     id: 'bottom-office-wool',
     name: 'Pleat Front Wool',
     category: 'bottom',
     style: 'office',
-    imagePath: '/assets/clothes/office-blazer.svg',
+    imagePath: officeBlazerUrl,
   },
   {
     id: 'shoes-casual-runner',
     name: 'Monochrome Runner',
     category: 'shoes',
     style: 'casual',
-    imagePath: '/assets/clothes/black-hoodie.svg',
+    imagePath: blackHoodieUrl,
   },
   {
     id: 'shoes-office-leather',
     name: 'Cap-Toe Oxford',
     category: 'shoes',
     style: 'office',
-    imagePath: '/assets/clothes/office-blazer.svg',
+    imagePath: officeBlazerUrl,
   },
 ]
 
