@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 260" fill="none" aria-hidden="true">
+  <path
+    stroke="#000000"
+    stroke-width="2"
+    stroke-linecap="square"
+    stroke-linejoin="miter"
+    d="M100 72 L76 82 L66 104 L62 138 L74 142 L82 110 L92 94"
+  />
+  <path
+    stroke="#000000"
+    stroke-width="2"
+    stroke-linecap="square"
+    stroke-linejoin="miter"
+    d="M100 72 L124 82 L134 104 L138 138 L126 142 L118 110 L108 94"
+  />
+  <path stroke="#000000" stroke-width="2" d="M100 72 V218" />
+  <path
+    stroke="#000000"
+    stroke-width="2"
+    stroke-linecap="square"
+    d="M92 94 V218 H108 V94"
+  />
+  <path stroke="#000000" stroke-width="2" d="M92 94 L100 106 L108 94" />
+</svg>

@@ -30,7 +30,10 @@ export default function Sidebar() {
                 `${linkClass} ${isActive ? 'bg-black text-white' : 'bg-white text-black'}`
               }
             >
-              <NavIcon className="size-4 shrink-0 stroke-[1.5]" aria-hidden />
+              <NavIcon
+                className="size-4 shrink-0 stroke-black stroke-[1.5] text-black"
+                aria-hidden
+              />
               <span>{label}</span>
             </NavLink>
           )

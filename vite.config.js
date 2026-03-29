@@ -18,7 +18,11 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['avishu-icon.svg', 'manifest.webmanifest'],
+      includeAssets: [
+        'avishu-icon.svg',
+        'manifest.webmanifest',
+        'assets/clothes/*.svg',
+      ],
       manifest: pwaManifest,
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,svg,png,webp}'],
