@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import '@mediapipe/pose'
-import { resolveClothingAssetUrl } from '../data/wardrobe.js'
+import {
+  buildGoogleImageSearchUrl,
+  buildLookSearchQuery,
+  buildPinterestSearchUrl,
+  resolveClothingAssetUrl,
+} from '../data/wardrobe.js'
 import { useLook } from '../hooks/useLook.js'
 import { readMirrorTopPath } from '../lib/mirrorTopStorage.js'
 
@@ -16,10 +21,17 @@ function lerp(a, b, t) {
   return a + (b - a) * t
 }
 
+function openDiscovery(url) {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
+
 export default function TryOn() {
   const { selectedLook, virtualMirrorTopPath } = useLook()
-  const videoRef = useRef(null)
+  const hiddenVideoRef = useRef(null)
+  const displayVideoRef = useRef(null)
   const canvasRef = useRef(null)
+  const poseRef = useRef(null)
+  const streamRef = useRef(null)
   const smoothRef = useRef({ cx: null, cy: null, drawW: null })
   const landmarkSmoothRef = useRef({
     nlx: null,
@@ -30,13 +42,16 @@ export default function TryOn() {
   const garmentLoadedRef = useRef(false)
   const firstPoseDoneRef = useRef(false)
   const mirrorSessionRef = useRef(0)
-  const [hasFirstPoseResults, setHasFirstPoseResults] = useState(false)
+
+  const [mediaStream, setMediaStream] = useState(null)
+  const [hasValidShoulderPose, setHasValidShoulderPose] = useState(false)
 
   const rawTopSource =
     virtualMirrorTopPath ??
     readMirrorTopPath() ??
     selectedLook?.top?.imagePath
   const topUrl = resolveClothingAssetUrl(rawTopSource)
+  const lookQuery = selectedLook ? buildLookSearchQuery(selectedLook) : ''
 
   useEffect(() => {
     smoothRef.current = { cx: null, cy: null, drawW: null }
@@ -46,24 +61,27 @@ export default function TryOn() {
     const session = ++mirrorSessionRef.current
     requestAnimationFrame(() => {
       if (mirrorSessionRef.current === session) {
-        setHasFirstPoseResults(false)
+        setHasValidShoulderPose(false)
       }
     })
   }, [topUrl])
 
   useEffect(() => {
-    if (!topUrl) return
+    if (!topUrl) {
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+      requestAnimationFrame(() => {
+        setMediaStream(null)
+      })
+      return
+    }
 
-    const video = videoRef.current
     const canvas = canvasRef.current
-    if (!video || !canvas) return
-
-    video.setAttribute('playsinline', '')
-    video.setAttribute('webkit-playsinline', '')
+    if (!canvas) return
 
     const PoseCtor = globalThis.Pose
     if (!PoseCtor) {
-      console.error('[TryOn] MediaPipe Pose not available on window')
+      console.error('[TryOn] MediaPipe Pose not available')
       return
     }
 
@@ -95,23 +113,19 @@ export default function TryOn() {
       minTrackingConfidence: 0.5,
     })
 
+    poseRef.current = pose
+
     let cancelled = false
-    let rafId = 0
-    let mediaStream = null
 
     pose.onResults((results) => {
       if (cancelled) return
 
-      if (results.poseLandmarks?.length && !firstPoseDoneRef.current) {
-        firstPoseDoneRef.current = true
-        setHasFirstPoseResults(true)
-      }
-
+      const hidden = hiddenVideoRef.current
       const ctx = canvas.getContext('2d')
-      if (!ctx || !video.videoWidth || !video.videoHeight) return
+      if (!hidden?.videoWidth || !hidden?.videoHeight || !ctx) return
 
-      const w = video.videoWidth
-      const h = video.videoHeight
+      const w = hidden.videoWidth
+      const h = hidden.videoHeight
       if (canvas.width !== w || canvas.height !== h) {
         canvas.width = w
         canvas.height = h
@@ -121,8 +135,14 @@ export default function TryOn() {
       const ls = lm?.[LEFT_SHOULDER]
       const rs = lm?.[RIGHT_SHOULDER]
       const visOk = (v) => (v?.visibility ?? 1) > 0.25
+      const shouldersValid = ls && rs && visOk(ls) && visOk(rs)
 
-      if (!ls || !rs || !visOk(ls) || !visOk(rs)) {
+      if (shouldersValid && !firstPoseDoneRef.current) {
+        firstPoseDoneRef.current = true
+        setHasValidShoulderPose(true)
+      }
+
+      if (!shouldersValid) {
         return
       }
 
@@ -189,21 +209,6 @@ export default function TryOn() {
       }
     })
 
-    const runFrameLoop = () => {
-      if (cancelled) return
-      rafId = requestAnimationFrame(async () => {
-        if (cancelled) return
-        try {
-          if (video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
-            await pose.send({ image: video })
-          }
-        } catch (err) {
-          console.error('[TryOn] pose.send failed', err)
-        }
-        runFrameLoop()
-      })
-    }
-
     ;(async () => {
       try {
         await pose.initialize()
@@ -213,7 +218,7 @@ export default function TryOn() {
       if (cancelled) return
 
       try {
-        mediaStream = await navigator.mediaDevices.getUserMedia({
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: {
             facingMode: 'user',
             width: { ideal: 1280 },
@@ -221,46 +226,95 @@ export default function TryOn() {
           },
           audio: false,
         })
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop())
+          return
+        }
+        streamRef.current = stream
+        setMediaStream(stream)
       } catch (e) {
-        console.error('[TryOn] Camera start failed', e)
-        return
+        const msg = e instanceof Error ? e.message : String(e)
+        alert(`[AVISHU] Camera could not start: ${msg}`)
+        console.error('[TryOn] getUserMedia failed', e)
       }
-      if (cancelled) {
-        mediaStream.getTracks().forEach((t) => t.stop())
-        return
-      }
-
-      video.srcObject = mediaStream
-
-      try {
-        await video.play()
-      } catch (e) {
-        console.error('[TryOn] video.play failed', e)
-      }
-
-      if (!cancelled) runFrameLoop()
     })()
 
     return () => {
       cancelled = true
-      cancelAnimationFrame(rafId)
       topImg.removeEventListener('load', onGarmentLoad)
       topImg.removeEventListener('error', onGarmentError)
-      if (mediaStream) {
-        mediaStream.getTracks().forEach((t) => t.stop())
-      }
-      video.srcObject = null
+      streamRef.current?.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+      setMediaStream(null)
       pose.close()
+      poseRef.current = null
     }
   }, [topUrl])
 
-  const handleCapture = useCallback(() => {
-    const video = videoRef.current
-    const overlay = canvasRef.current
-    if (!video?.videoWidth || !overlay?.width) return
+  useEffect(() => {
+    const hidden = hiddenVideoRef.current
+    const display = displayVideoRef.current
+    if (!mediaStream) {
+      if (hidden) hidden.srcObject = null
+      if (display) display.srcObject = null
+      return
+    }
+    hidden?.setAttribute('playsinline', '')
+    hidden?.setAttribute('webkit-playsinline', '')
+    display?.setAttribute('playsinline', '')
+    display?.setAttribute('webkit-playsinline', '')
+    if (hidden) hidden.srcObject = mediaStream
+    if (display) display.srcObject = mediaStream
+    hidden?.play().catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`[AVISHU] Camera playback failed: ${msg}`)
+      console.error('[TryOn] hidden video.play', e)
+    })
+    display?.play().catch((e) => {
+      const msg = e instanceof Error ? e.message : String(e)
+      alert(`[AVISHU] Camera playback failed: ${msg}`)
+      console.error('[TryOn] display video.play', e)
+    })
+  }, [mediaStream])
 
-    const vw = video.videoWidth
-    const vh = video.videoHeight
+  useEffect(() => {
+    if (!topUrl || !mediaStream) return
+    const pose = poseRef.current
+    const hidden = hiddenVideoRef.current
+    if (!pose || !hidden) return
+
+    let cancelled = false
+    let rafId = 0
+
+    const loop = () => {
+      if (cancelled) return
+      rafId = requestAnimationFrame(async () => {
+        if (cancelled) return
+        try {
+          if (hidden.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+            await pose.send({ image: hidden })
+          }
+        } catch (err) {
+          console.error('[TryOn] pose.send failed', err)
+        }
+        loop()
+      })
+    }
+    loop()
+
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(rafId)
+    }
+  }, [topUrl, mediaStream])
+
+  const handleCapture = useCallback(() => {
+    const hidden = hiddenVideoRef.current
+    const overlay = canvasRef.current
+    if (!hidden?.videoWidth || !overlay?.width) return
+
+    const vw = hidden.videoWidth
+    const vh = hidden.videoHeight
     const out = document.createElement('canvas')
     out.width = vw
     out.height = vh
@@ -269,7 +323,7 @@ export default function TryOn() {
 
     octx.translate(vw, 0)
     octx.scale(-1, 1)
-    octx.drawImage(video, 0, 0, vw, vh)
+    octx.drawImage(hidden, 0, 0, vw, vh)
     octx.drawImage(overlay, 0, 0, vw, vh)
 
     out.toBlob((blob) => {
@@ -307,39 +361,71 @@ export default function TryOn() {
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {selectedLook ? (
-            <div className="grid shrink-0 grid-cols-3 gap-px border-b border-black bg-black">
-              {[
-                { label: 'Top', item: selectedLook.top },
-                { label: 'Bottom', item: selectedLook.bottom },
-                { label: 'Shoes', item: selectedLook.shoes },
-              ].map(({ label, item }) => (
-                <article
-                  key={item.id}
-                  className="flex flex-col bg-white p-3"
+            <>
+              <div className="grid shrink-0 grid-cols-3 gap-px border-b border-black bg-black">
+                {[
+                  { label: 'Top', item: selectedLook.top },
+                  { label: 'Bottom', item: selectedLook.bottom },
+                  { label: 'Shoes', item: selectedLook.shoes },
+                ].map(({ label, item }) => (
+                  <article
+                    key={item.id}
+                    className="flex flex-col bg-white p-3"
+                  >
+                    <p className="mb-2 text-[9px] uppercase tracking-widest">
+                      {label}
+                    </p>
+                    <div className="flex h-20 items-center justify-center border border-black bg-white">
+                      <img
+                        src={resolveClothingAssetUrl(item.imagePath)}
+                        alt=""
+                        className="max-h-full max-w-full object-contain"
+                      />
+                    </div>
+                  </article>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-px border-b border-black bg-black p-px">
+                <button
+                  type="button"
+                  onClick={() =>
+                    openDiscovery(buildPinterestSearchUrl(lookQuery))
+                  }
+                  className="min-h-[44px] flex-1 rounded-none border border-black bg-white px-3 py-2 text-[9px] uppercase tracking-widest text-black hover:bg-black hover:text-white md:min-w-0"
                 >
-                  <p className="mb-2 text-[9px] uppercase tracking-widest">
-                    {label}
-                  </p>
-                  <div className="flex h-20 items-center justify-center border border-black bg-white">
-                    <img
-                      src={resolveClothingAssetUrl(item.imagePath)}
-                      alt=""
-                      className="max-h-full max-w-full object-contain"
-                    />
-                  </div>
-                </article>
-              ))}
-            </div>
+                  Find on Pinterest
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    openDiscovery(buildGoogleImageSearchUrl(lookQuery))
+                  }
+                  className="min-h-[44px] flex-1 rounded-none border border-black bg-white px-3 py-2 text-[9px] uppercase tracking-widest text-black hover:bg-black hover:text-white md:min-w-0"
+                >
+                  Google Lens
+                </button>
+              </div>
+            </>
           ) : null}
 
+          <video
+            ref={hiddenVideoRef}
+            className="rounded-none"
+            style={{ display: 'none' }}
+            autoPlay
+            playsInline
+            muted
+            aria-hidden
+          />
+
           <div className="relative min-h-[min(100svh,100dvh)] w-full flex-1 overflow-hidden bg-black md:min-h-[70svh]">
-            {!hasFirstPoseResults ? (
-              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 border border-black bg-white text-black">
-                <p className="text-sm uppercase tracking-[0.35em]">
-                  LOADING AI MODEL
+            {!hasValidShoulderPose ? (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 border border-black bg-white p-6 text-black">
+                <p className="text-center text-xs uppercase tracking-[0.25em]">
+                  AI MODEL INITIALIZING (10-15S)...
                 </p>
-                <p className="max-w-xs px-6 text-center text-[10px] uppercase tracking-widest">
-                  CAMERA + POSE — STAND IN FRAME
+                <p className="max-w-xs text-center text-[10px] uppercase tracking-widest">
+                  ALLOW CAMERA · STAND IN FRAME · SHOULDERS VISIBLE
                 </p>
               </div>
             ) : null}
@@ -350,12 +436,11 @@ export default function TryOn() {
             >
               <div className="relative max-h-full max-w-full">
                 <video
-                  ref={videoRef}
+                  ref={displayVideoRef}
                   className="block max-h-full max-w-full rounded-none"
+                  autoPlay
                   playsInline
                   muted
-                  autoPlay
-                  loop
                 />
                 <canvas
                   ref={canvasRef}
@@ -365,18 +450,17 @@ export default function TryOn() {
             </div>
           </div>
 
-          <footer className="shrink-0 border-t border-black bg-white p-4 md:px-6">
+          <footer className="shrink-0 space-y-3 border-t border-black bg-white p-4 md:px-6">
             <button
               type="button"
               onClick={handleCapture}
-              disabled={!hasFirstPoseResults}
+              disabled={!hasValidShoulderPose}
               className="w-full rounded-none border border-black bg-white py-3 text-xs uppercase tracking-widest transition-colors enabled:hover:bg-black enabled:hover:text-white disabled:cursor-not-allowed md:max-w-xs"
             >
               CAPTURE
             </button>
-            <p className="mt-3 max-w-xl text-[9px] uppercase tracking-widest">
-              LANDMARKS 11–12 · WIDTH × {WIDTH_SCALE} · SMOOTHED · PLACEHOLDER
-              IF NO GARMENT
+            <p className="max-w-xl text-[9px] uppercase tracking-widest">
+              LANDMARKS 11–12 · WIDTH × {WIDTH_SCALE} · VITE ASSETS · IOS CAMERA
             </p>
           </footer>
         </div>

@@ -1,9 +1,19 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { generateLook, resolveClothingAssetUrl } from '../data/wardrobe.js'
+import {
+  buildGoogleImageSearchUrl,
+  buildLookSearchQuery,
+  buildPinterestSearchUrl,
+  generateLook,
+  resolveClothingAssetUrl,
+} from '../data/wardrobe.js'
 import { useLook } from '../hooks/useLook.js'
 
 const STYLES = ['office', 'casual']
+
+function openDiscovery(url) {
+  window.open(url, '_blank', 'noopener,noreferrer')
+}
 
 export default function Stylist() {
   const navigate = useNavigate()
@@ -19,6 +29,10 @@ export default function Stylist() {
       { label: 'Shoes', item: currentOutfit.shoes },
     ]
   }, [currentOutfit])
+
+  const lookQuery = currentOutfit
+    ? buildLookSearchQuery(currentOutfit)
+    : ''
 
   const handleGenerateLook = () => {
     setCurrentOutfit(generateLook(selectedStyle))
@@ -80,7 +94,28 @@ export default function Stylist() {
           NO OUTFIT YET. TAP GENERATE LOOK.
         </p>
       ) : (
-        <div className="grid grid-cols-1 gap-px border border-black bg-black md:grid-cols-3">
+        <>
+          <div className="mb-6 flex flex-wrap gap-px border border-black bg-black p-px">
+            <button
+              type="button"
+              onClick={() =>
+                openDiscovery(buildPinterestSearchUrl(lookQuery))
+              }
+              className="min-h-[44px] flex-1 rounded-none border border-black bg-white px-3 py-2 text-[9px] uppercase tracking-widest text-black hover:bg-black hover:text-white md:min-w-0"
+            >
+              Find on Pinterest
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                openDiscovery(buildGoogleImageSearchUrl(lookQuery))
+              }
+              className="min-h-[44px] flex-1 rounded-none border border-black bg-white px-3 py-2 text-[9px] uppercase tracking-widest text-black hover:bg-black hover:text-white md:min-w-0"
+            >
+              Google Lens
+            </button>
+          </div>
+          <div className="grid grid-cols-1 gap-px border border-black bg-black md:grid-cols-3">
           {slots.map(({ label, item }) => (
             <article
               key={item.id}
@@ -91,7 +126,7 @@ export default function Stylist() {
               </p>
               <div className="mb-3 flex aspect-[3/4] w-full items-center justify-center overflow-hidden border border-black bg-white">
                 <img
-                  src={item.imagePath}
+                  src={resolveClothingAssetUrl(item.imagePath)}
                   alt=""
                   className="max-h-full max-w-full object-contain"
                 />
@@ -111,6 +146,7 @@ export default function Stylist() {
             </article>
           ))}
         </div>
+        </>
       )}
     </div>
   )
